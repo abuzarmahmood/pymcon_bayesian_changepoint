@@ -14,6 +14,7 @@ def gen_simple_plots(
         disaster_data,
         disaster_model,
         disaster_trace,
+        figsize = (7,7),
         ):
     with disaster_model:
       disaster_ppc = pm.sample_posterior_predictive(disaster_trace)
@@ -24,10 +25,10 @@ def gen_simple_plots(
     disaster_switch_inferred = disaster_trace["posterior"]["switchpoint"]
     mean_switch,std_switch = disaster_switch_inferred.mean(), disaster_switch_inferred.std()
 
-    fig, ax = plt.subplots(2,1,figsize=(10, 8))
+    fig, ax = plt.subplots(2,1,figsize=figsize)
     ax[0].scatter(years, disaster_data, marker = ".", s = 200)
-    ax[0].set_ylabel("Number of accidents", fontsize=16)
-    ax[0].set_xlabel("Year", fontsize=16)
+    ax[0].set_ylabel("Number of accidents") 
+    ax[0].set_xlabel("Year") 
 
     ax[0].vlines(mean_switch, disaster_data.min(), disaster_data.max(),
                color="k", label = 'Mean switchpoint')
@@ -42,8 +43,8 @@ def gen_simple_plots(
     ax[0].legend()
 
     ax[1].scatter(years, disaster_data, marker = ".", s = 200)
-    ax[1].set_ylabel("Number of accidents", fontsize=16)
-    ax[1].set_xlabel("Year", fontsize=16)
+    ax[1].set_ylabel("Number of accidents") 
+    ax[1].set_xlabel("Year") 
     ax[1].fill_between(years, mean_ppc-std_ppc, mean_ppc+std_ppc,
                        label = '+/- 1 std mean rate', color='red', alpha = 0.5)
     ax[1].vlines(disaster_switch_inferred.min(), disaster_data.min(), disaster_data.max(),
@@ -51,12 +52,15 @@ def gen_simple_plots(
     ax[1].vlines(disaster_switch_inferred.max(), disaster_data.min(), disaster_data.max(),
                color="k", label = 'Switchpoint bounds', linestyles = 'dashed')
     ax[1].legend()
+    fig.suptitle('Inference Outputs')
 
 def gen_bernoulli_plots(
     trace,
     component_inds,
     n_trials,
-    true_r):
+    true_r,
+    figsize = (7,3),
+    ):
 
     tau_samples = trace['posterior']['tau']
     int_tau = np.vectorize(int)(tau_samples)
@@ -79,7 +83,7 @@ def gen_bernoulli_plots(
     else:
         plot_inferred_inds = categorical_w
     
-    fig,ax = plt.subplots(1,3,figsize=(7,3))
+    fig,ax = plt.subplots(1,3,figsize=figsize)
     ax[0].set_title('True rates with transitions')
     ax[0].imshow(true_r,aspect='auto',origin='lower',vmin=0,vmax=1)
     ax[1].plot(component_inds, np.arange(n_trials),'-o',label='Actual', alpha = 0.5)
@@ -98,13 +102,13 @@ def gen_bernoulli_plots(
 
 def gen_dirichlet_plots(
     dpp_trace,
-    n_trials,
     true_r,
     n_chains,
     true_tau,
     length,
     n_states,
     max_states,
+    figsize = (7,15),
     ):
 
     w_latent_samples = dpp_trace['posterior']['w_latent'].values
@@ -129,7 +133,7 @@ def gen_dirichlet_plots(
                             )
                         )
 
-    fig,ax = plt.subplots(5,1, figsize = (7,15))
+    fig,ax = plt.subplots(5,1, figsize = figsize)
 
     sns.stripplot(
         data = state_frame,
@@ -146,20 +150,26 @@ def gen_dirichlet_plots(
     ax[0].text(0, shortest_state, 'Shortest state')
     ax[0].axhline(0.01, color = 'red', linestyle = '--')
     ax[0].text(0, 0.01, '0.01')
-    # ax[0].axhline(0.05, color = 'red', linestyle = '--')
-    # ax[0].text(0, 0.05, '0.05')
+    ax[0].set_xlabel('State #')
+    ax[0].set_ylabel('Fractional Duration')
 
     corrected_transitions = np.cumsum(sorted_w_latent,axis=-1)
     tau_samples = dpp_trace['posterior']['tau'].values
     ax[1].imshow(true_r,aspect='auto', interpolation = 'nearest')
-    # for x in tau_samples.T:
-    #     ax[2].hist(x, bins = np.arange(length), c = 'k')
+    ax[1].set_title('True rates')
+    ax[1].set_ylabel('Neuron #')
+    ax[1].set_xlabel('Time')
     ax[2].hist(tau_samples.flatten(), bins = np.arange(length), color = 'grey')
     ax[2].sharex(ax[1])
+    ax[2].set_title('Tau samples')
+    ax[2].set_ylabel('Count')
+    ax[2].set_xlabel('Time')
 
     im1 = ax[3].imshow(sorted_lens, interpolation='nearest', aspect= 'auto')
     ax[3].set_title('Sorted latent_w')
-    fig.colorbar(im1, ax=ax[3])
+    ax[3].set_ylabel('Sample #')
+    ax[3].set_xlabel('State #')
+    fig.colorbar(im1, ax=ax[3], label = 'State Duration')
     plt.tight_layout()
 
     max_state_per_chain = state_frame.loc[state_frame.dur > 0.01].groupby('chains').max()
@@ -167,10 +177,11 @@ def gen_dirichlet_plots(
     state_vec = np.arange(1,max_states+1)
     counts = [max_state_counts.loc[x].values[0] if x in max_state_counts.index else 0 for x in state_vec ]
     ax[4].axvline(n_states, zorder = 2, color = 'black', label = 'Actual')
-    ax[4].legend()
-    ax[4].bar(state_vec, counts)
+    ax[4].bar(state_vec, counts, label = 'Inferred')
     ax[4].set_xlabel("States")
     ax[4].set_ylabel('Count')
+    ax[4].set_title('Number of states')
+    ax[4].legend()
 
     plt.tight_layout()
 
