@@ -54,7 +54,7 @@ def gen_simple_plots(
     ax[1].legend()
     fig.suptitle('Inference Outputs')
 
-def gen_bernoulli_plots(
+def gen_bernoulli_main_plot(
     trace,
     component_inds,
     n_trials,
@@ -66,24 +66,28 @@ def gen_bernoulli_plots(
     int_tau = np.vectorize(int)(tau_samples)
     mode_tau = stats.mode(int_tau,axis=0)[0][0]
     hist_tau = np.array([np.histogram(trial, bins = np.arange(20))[0] for trial in int_tau.swapaxes(0,1)])
-    
+
     w_samples = trace['posterior']['w'].values
     w_samples_long = np.reshape(w_samples,(-1,w_samples.shape[-1]))
     mean_w = np.mean(w_samples,axis=(0,1))
     categorical_w = np.argmax(mean_w,axis=-1)
-    
+
     cat_accuracy_list = [np.sum(categorical_w==component_inds),
-                          np.sum((1-categorical_w)==component_inds)]
+                         np.sum((1-categorical_w)==component_inds)]
     model_ind = int(np.argmax(cat_accuracy_list))
     cat_accuracy = cat_accuracy_list[model_ind]
-    
-    
+
+
     if np.mean(categorical_w == component_inds) < 0.5:
         plot_inferred_inds = 1-categorical_w
     else:
         plot_inferred_inds = categorical_w
-    
-    fig,ax = plt.subplots(1,3,figsize=figsize)
+
+    plot_components = np.zeros((n_trials, 2))
+    plot_components[np.where(1-component_inds)[0],0] = 1
+    plot_components[np.where(component_inds)[0],1] = 1
+
+    fig,ax = plt.subplots(1,4,figsize=figsize, sharey=True)
     ax[0].set_title('True rates with transitions')
     ax[0].imshow(true_r,aspect='auto',origin='lower',vmin=0,vmax=1)
     ax[1].plot(component_inds, np.arange(n_trials),'-o',label='Actual', alpha = 0.5)
@@ -93,23 +97,50 @@ def gen_bernoulli_plots(
     for trial,val in enumerate(mode_tau):
         ax[0].vlines(val, trial-0.5,trial+0.5, linewidth = 5, color='red')
     ax[2].imshow(mean_w,aspect='auto',origin='lower');
+    ax[3].imshow(plot_components,aspect='auto',origin='lower');
+    ax[3].set_title('Actual Mixture Components')
+    ax[3].set_xlabel('Mixture #')
     ax[2].set_title('Mixture weights')
-    ax[1].set_ylabel('Trial #')
     ax[1].set_xlabel('Mixture #')
-    ax[2].set_ylabel('Trial #')
+    ax[0].set_ylabel('Trial #')
     ax[2].set_xlabel('Mixture #')
     plt.tight_layout()
 
+def gen_bernoulli_emissions_plot(
+        trace,
+        true_lambda,
+        figsize = (7,3),
+        ):
+    emission_var_names = [['l00','l01','l02'],['l10','l11','l12']]
+    emission_var_names_flat = [x for y in emission_var_names for x in y]
+    emission_values = np.stack([[trace['posterior'][x] for x in this_comp] \
+            for this_comp in emission_var_names])
+    mean_emissions = emission_values.mean(axis=(2,3))
+    std_emissions = emission_values.std(axis=(2,3))
+
+    fig,ax = plt.subplots(1,2, sharex=True, sharey=True, figsize=figsize);
+    ax[0].bar(emission_var_names_flat, true_lambda.flatten());
+    ax[1].errorbar(emission_var_names_flat, mean_emissions.flatten(), 
+                   yerr = std_emissions.flatten(), fmt = 'o', c = 'k',
+                   label = 'St.Dev.');
+    ax[1].legend()
+    ax[1].bar(emission_var_names_flat, mean_emissions.flatten());
+    ax[0].set_title('Actual Emissions');
+    ax[1].set_title('Inferred Emissions');
+    ax[0].set_ylabel('Emission Rate');
+    ax[0].set_xlabel('Variable Name');
+    ax[1].set_xlabel('Variable Name');
+
 def gen_dirichlet_plots(
-    dpp_trace,
-    true_r,
-    n_chains,
-    true_tau,
-    length,
-    n_states,
-    max_states,
-    figsize = (7,15),
-    ):
+        dpp_trace,
+        true_r,
+        n_chains,
+        true_tau,
+        length,
+        n_states,
+        max_states,
+        figsize = (7,15),
+        ):
 
     w_latent_samples = dpp_trace['posterior']['w_latent'].values
     cat_w_latent_samples = np.concatenate(w_latent_samples)
@@ -126,22 +157,22 @@ def gen_dirichlet_plots(
 
     inds = np.array(list(np.ndindex(mean_sorted.shape)))
     state_frame = pd.DataFrame(
-                            dict(
-                                chains = inds[:,0],
-                                states = inds[:,1]+1,
-                                dur = mean_sorted.flatten()
-                            )
-                        )
+            dict(
+                chains = inds[:,0],
+                states = inds[:,1]+1,
+                dur = mean_sorted.flatten()
+                )
+            )
 
     fig,ax = plt.subplots(5,1, figsize = figsize)
 
     sns.stripplot(
-        data = state_frame,
-        x = 'states',
-        y = 'dur',
-        color = 'k',
-        ax = ax[0]
-    )
+            data = state_frame,
+            x = 'states',
+            y = 'dur',
+            color = 'k',
+            ax = ax[0]
+            )
     ax[0].plot(mean_sorted.T, alpha = 0.7, color = 'grey')
 
     ax[0].axvline(n_states-1, zorder = -1, color = 'black', label = 'Actual')

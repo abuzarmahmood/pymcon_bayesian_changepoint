@@ -93,7 +93,7 @@ def return_bernoulli_mixture_data(
     # Final spiking data
     data_vec = np.random.random(true_r.shape) < true_r
 
-    return true_r, data_vec, component_inds, idx
+    return true_r, data_vec, component_inds, idx, true_lambda
 
 def return_dirichlet_process_data(
         length = 100,
