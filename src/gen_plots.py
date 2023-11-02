@@ -11,45 +11,45 @@ import pandas as pd
 
 def gen_simple_plots(
         years,
-        disaster_data,
-        disaster_model,
-        disaster_trace,
+        poisson_data,
+        simple_model,
+        poisson_trace,
         figsize = (7,7),
         ):
-    with disaster_model:
-      disaster_ppc = pm.sample_posterior_predictive(disaster_trace)
+    with simple_model:
+      poisson_ppc = pm.sample_posterior_predictive(poisson_trace)
 
-    ppc_values = disaster_ppc['posterior_predictive']['disasters']
+    ppc_values = poisson_ppc['posterior_predictive']['counts']
     mean_ppc, std_ppc = np.mean(ppc_values,axis=(0,1)),np.std(ppc_values,axis=(0,1))
 
-    disaster_switch_inferred = disaster_trace["posterior"]["switchpoint"]
-    mean_switch,std_switch = disaster_switch_inferred.mean(), disaster_switch_inferred.std()
+    poisson_switch_inferred = poisson_trace["posterior"]["switchpoint"]
+    mean_switch,std_switch = poisson_switch_inferred.mean(), poisson_switch_inferred.std()
 
     fig, ax = plt.subplots(2,1,figsize=figsize)
-    ax[0].scatter(years, disaster_data, marker = ".", s = 200)
-    ax[0].set_ylabel("Number of accidents") 
-    ax[0].set_xlabel("Year") 
+    ax[0].scatter(years, poisson_data, marker = ".", s = 200)
+    ax[0].set_ylabel("Number of Counts") 
+    ax[0].set_xlabel("Time") 
 
-    ax[0].vlines(mean_switch, disaster_data.min(), disaster_data.max(),
+    ax[0].vlines(mean_switch, poisson_data.min(), poisson_data.max(),
                color="k", label = 'Mean switchpoint')
 
-    ax[0].vlines(disaster_switch_inferred.min(), disaster_data.min(), disaster_data.max(),
+    ax[0].vlines(poisson_switch_inferred.min(), poisson_data.min(), poisson_data.max(),
                color="k", linestyles = 'dashed')
-    ax[0].vlines(disaster_switch_inferred.max(), disaster_data.min(), disaster_data.max(),
+    ax[0].vlines(poisson_switch_inferred.max(), poisson_data.min(), poisson_data.max(),
                color="k", label = 'Switchpoint bounds', linestyles = 'dashed')
     ax[0].axvspan(mean_switch-3*std_switch, mean_switch+3*std_switch, alpha = 0.5,
                 color='r', label = '+/- 3 std Switchpoint')
-    ax[0].plot(years, mean_ppc, label = 'Average disasters', c='red', lw=5)
+    ax[0].plot(years, mean_ppc, label = 'Average poissons', c='red', lw=5)
     ax[0].legend()
 
-    ax[1].scatter(years, disaster_data, marker = ".", s = 200)
-    ax[1].set_ylabel("Number of accidents") 
-    ax[1].set_xlabel("Year") 
+    ax[1].scatter(years, poisson_data, marker = ".", s = 200)
+    ax[1].set_ylabel("Number of Counts") 
+    ax[1].set_xlabel("Time") 
     ax[1].fill_between(years, mean_ppc-std_ppc, mean_ppc+std_ppc,
                        label = '+/- 1 std mean rate', color='red', alpha = 0.5)
-    ax[1].vlines(disaster_switch_inferred.min(), disaster_data.min(), disaster_data.max(),
+    ax[1].vlines(poisson_switch_inferred.min(), poisson_data.min(), poisson_data.max(),
                color="k", linestyles = 'dashed')
-    ax[1].vlines(disaster_switch_inferred.max(), disaster_data.min(), disaster_data.max(),
+    ax[1].vlines(poisson_switch_inferred.max(), poisson_data.min(), poisson_data.max(),
                color="k", label = 'Switchpoint bounds', linestyles = 'dashed')
     ax[1].legend()
     fig.suptitle('Inference Outputs')
