@@ -55,12 +55,12 @@ def gen_simple_plots(
     fig.suptitle('Inference Outputs')
 
 def gen_bernoulli_main_plot(
-    trace,
-    component_inds,
-    n_trials,
-    true_r,
-    figsize = (7,3),
-    ):
+        trace,
+        component_inds,
+        n_trials,
+        true_r,
+        figsize = (7,3),
+        ):
 
     tau_samples = trace['posterior']['tau']
     int_tau = np.vectorize(int)(tau_samples)
@@ -78,14 +78,17 @@ def gen_bernoulli_main_plot(
     cat_accuracy = cat_accuracy_list[model_ind]
 
 
-    if np.mean(categorical_w == component_inds) < 0.5:
-        plot_inferred_inds = 1-categorical_w
-    else:
-        plot_inferred_inds = categorical_w
-
     plot_components = np.zeros((n_trials, 2))
-    plot_components[np.where(1-component_inds)[0],0] = 1
-    plot_components[np.where(component_inds)[0],1] = 1
+    if np.mean(categorical_w == component_inds) < 0.5:
+        flip_emissions = True
+        plot_inferred_inds = 1-categorical_w
+        plot_components[np.where(component_inds)[0],0] = 1
+        plot_components[np.where(1-component_inds)[0],1] = 1
+    else:
+        flip_emissions = False
+        plot_inferred_inds = categorical_w
+        plot_components[np.where(1-component_inds)[0],0] = 1
+        plot_components[np.where(component_inds)[0],1] = 1
 
     fig,ax = plt.subplots(1,4,figsize=figsize, sharey=True)
     ax[0].set_title('True rates with transitions')
@@ -106,113 +109,136 @@ def gen_bernoulli_main_plot(
     ax[2].set_xlabel('Mixture #')
     plt.tight_layout()
 
-def gen_bernoulli_emissions_plot(
-        trace,
-        true_lambda,
-        figsize = (7,3),
-        ):
-    emission_var_names = [['l00','l01','l02'],['l10','l11','l12']]
-    emission_var_names_flat = [x for y in emission_var_names for x in y]
-    emission_values = np.stack([[trace['posterior'][x] for x in this_comp] \
-            for this_comp in emission_var_names])
-    mean_emissions = emission_values.mean(axis=(2,3))
-    std_emissions = emission_values.std(axis=(2,3))
+    return flip_emissions
 
-    fig,ax = plt.subplots(1,2, sharex=True, sharey=True, figsize=figsize);
-    ax[0].bar(emission_var_names_flat, true_lambda.flatten());
-    ax[1].errorbar(emission_var_names_flat, mean_emissions.flatten(), 
+def gen_bernoulli_emissions_plot(
+    trace,
+    n_states,
+    n_components,
+    flip_emissions,
+    true_lambda = None,
+    figsize = (7,3),
+):
+    if true_lambda is not None:
+        fig, ax = plt.subplots(1,2, sharex=True, sharey=True, figsize = figsize)
+    else:
+        fig, ax = plt.subplots(1,1, 
+                               sharex=True, sharey=True, 
+                               figsize = (figsize[0]/2, figsize[1]))
+        ax = [ax]
+        
+    state_names = np.stack(
+            [
+                [f'Comp{i}_State{j}' for j in range(n_states)] \
+                        for i in range(n_components)
+                        ]
+            )
+
+    emission_values = trace['posterior']['lambdas'].values
+    if flip_emissions:
+        emission_values = emission_values[:,:,::-1]
+    mean_emissions = emission_values.mean(axis=(0,1))
+    std_emissions = emission_values.std(axis=(0,1))
+
+    if true_lambda is not None:
+        ax[0].bar(state_names.flatten(), true_lambda.flatten());
+        ax[0].set_xticks(
+                np.arange(state_names.size), 
+                state_names.flatten(), rotation = 45, 
+                ha='right', rotation_mode='anchor');
+        ax[0].set_title('Actual Emissions')
+        ax[0].set_xlabel('Variable Name');
+        ax[0].set_ylabel('Emission Rate')
+    
+    ax[-1].errorbar(state_names.flatten(), mean_emissions.flatten(), 
                    yerr = std_emissions.flatten(), fmt = 'o', c = 'k',
                    label = 'St.Dev.');
-    ax[1].legend()
-    ax[1].bar(emission_var_names_flat, mean_emissions.flatten());
-    ax[0].set_title('Actual Emissions');
-    ax[1].set_title('Inferred Emissions');
-    ax[0].set_ylabel('Emission Rate');
-    ax[0].set_xlabel('Variable Name');
-    ax[1].set_xlabel('Variable Name');
+    ax[-1].legend()
+    ax[-1].bar(state_names.flatten(), mean_emissions.flatten());
+    ax[-1].set_title('Inferred Emissions');
+    ax[-1].set_xlabel('Variable Name');
+    ax[-1].set_xticks(
+            np.arange(state_names.size), state_names.flatten(), 
+            rotation = 45, ha='right', rotation_mode='anchor');
 
 def gen_dirichlet_plots(
-        dpp_trace,
-        true_r,
-        n_chains,
-        true_tau,
-        length,
-        n_states,
-        max_states,
-        figsize = (7,15),
-        ):
+		dpp_trace,
+		true_r,
+		n_chains,
+		length,
+		max_states,
+		n_states = None,
+		dur_thresh = 0.01,
+		figsize = (7,15),
+		):
 
-    w_latent_samples = dpp_trace['posterior']['w_latent'].values
-    cat_w_latent_samples = np.concatenate(w_latent_samples)
-    sorted_lens = np.sort(cat_w_latent_samples,axis=-1)[:,::-1]
+	w_latent_samples = dpp_trace['posterior']['w_latent'].values
+	cat_w_latent_samples = np.concatenate(w_latent_samples)
+	sorted_lens = np.sort(cat_w_latent_samples,axis=-1)[:,::-1]
 
-    sorted_w_latent = np.stack(np.array_split(np.sort(w_latent_samples,axis=-1)[...,::-1],n_chains,axis=0))
-    sorted_w_latent = np.squeeze(sorted_w_latent)
-    mean_sorted = np.mean(sorted_w_latent, axis = 1)
+	sorted_w_latent = np.stack(np.array_split(np.sort(w_latent_samples,axis=-1)[...,::-1],n_chains,axis=0))
+	sorted_w_latent = np.squeeze(sorted_w_latent)
+	mean_sorted = np.mean(sorted_w_latent, axis = 1)
 
-    all_state_edges = np.concatenate([[0],true_tau,[length]])
-    state_durations = np.abs(np.diff(all_state_edges))
-    sorted_state_durations = np.sort(state_durations / length)[::-1]
-    shortest_state = sorted_state_durations[-1]
+	inds = np.array(list(np.ndindex(mean_sorted.shape)))
+	state_frame = pd.DataFrame(
+			dict(
+				chains = inds[:,0],
+				states = inds[:,1]+1,
+				dur = mean_sorted.flatten()
+				)
+			)
 
-    inds = np.array(list(np.ndindex(mean_sorted.shape)))
-    state_frame = pd.DataFrame(
-            dict(
-                chains = inds[:,0],
-                states = inds[:,1]+1,
-                dur = mean_sorted.flatten()
-                )
-            )
+	fig,ax = plt.subplots(5,1, figsize = figsize)
 
-    fig,ax = plt.subplots(5,1, figsize = figsize)
+	sns.stripplot(
+			data = state_frame,
+			x = 'states',
+			y = 'dur',
+			color = 'k',
+			ax = ax[0]
+			)
+	ax[0].plot(mean_sorted.T, alpha = 0.7, color = 'grey')
 
-    sns.stripplot(
-            data = state_frame,
-            x = 'states',
-            y = 'dur',
-            color = 'k',
-            ax = ax[0]
-            )
-    ax[0].plot(mean_sorted.T, alpha = 0.7, color = 'grey')
+	if n_states is not None:
+		ax[0].axvline(n_states-1, zorder = -1, color = 'black', label = 'Actual')
+		ax[0].legend()
+	ax[0].axhline(dur_thresh, color = 'red', linestyle = '--')
+	ax[0].text(max_states//2, dur_thresh*1.5, f'Duration Threshold = {dur_thresh}')
+	ax[0].set_xlabel('State #')
+	ax[0].set_ylabel('Fractional Duration')
+	ax[0].set_title('Inferred Durations of States')
 
-    ax[0].axvline(n_states-1, zorder = -1, color = 'black', label = 'Actual')
-    ax[0].legend()
-    ax[0].axhline(shortest_state, color = 'red', linestyle = '--')
-    ax[0].text(0, shortest_state, 'Shortest state')
-    ax[0].axhline(0.01, color = 'red', linestyle = '--')
-    ax[0].text(0, 0.01, '0.01')
-    ax[0].set_xlabel('State #')
-    ax[0].set_ylabel('Fractional Duration')
+	corrected_transitions = np.cumsum(sorted_w_latent,axis=-1)
+	tau_samples = dpp_trace['posterior']['tau'].values
+	ax[1].imshow(true_r,aspect='auto', interpolation = 'nearest')
+	ax[1].set_title('True rates')
+	ax[1].set_ylabel('Neuron #')
+	ax[1].set_xlabel('Time')
+	ax[2].hist(tau_samples.flatten(), bins = np.arange(length), color = 'grey')
+	ax[2].sharex(ax[1])
+	ax[2].set_title('Tau samples')
+	ax[2].set_ylabel('Count')
+	ax[2].set_xlabel('Time')
 
-    corrected_transitions = np.cumsum(sorted_w_latent,axis=-1)
-    tau_samples = dpp_trace['posterior']['tau'].values
-    ax[1].imshow(true_r,aspect='auto', interpolation = 'nearest')
-    ax[1].set_title('True rates')
-    ax[1].set_ylabel('Neuron #')
-    ax[1].set_xlabel('Time')
-    ax[2].hist(tau_samples.flatten(), bins = np.arange(length), color = 'grey')
-    ax[2].sharex(ax[1])
-    ax[2].set_title('Tau samples')
-    ax[2].set_ylabel('Count')
-    ax[2].set_xlabel('Time')
+	im1 = ax[3].imshow(sorted_lens, interpolation='nearest', aspect= 'auto')
+	ax[3].set_title('Sorted latent_w')
+	ax[3].set_ylabel('Sample #')
+	ax[3].set_xlabel('State #')
+	fig.colorbar(im1, ax=ax[3], label = 'State Duration')
+	plt.tight_layout()
 
-    im1 = ax[3].imshow(sorted_lens, interpolation='nearest', aspect= 'auto')
-    ax[3].set_title('Sorted latent_w')
-    ax[3].set_ylabel('Sample #')
-    ax[3].set_xlabel('State #')
-    fig.colorbar(im1, ax=ax[3], label = 'State Duration')
-    plt.tight_layout()
+	max_state_per_chain = state_frame.loc[state_frame.dur > dur_thresh].groupby('chains').max()
+	max_state_counts = max_state_per_chain.groupby('states').count()
+	state_vec = np.arange(1,max_states+1)
+	counts = [max_state_counts.loc[x].values[0] if x in max_state_counts.index else 0 for x in state_vec ]
+	if n_states is not None:
+		ax[4].axvline(n_states, zorder = 2, color = 'black', label = 'Actual')
+	ax[4].bar(state_vec, counts, label = 'Inferred')
+	ax[4].set_xlabel("States")
+	ax[4].set_ylabel('Count')
+	ax[4].set_title('Number of states')
+	ax[4].legend()
 
-    max_state_per_chain = state_frame.loc[state_frame.dur > 0.01].groupby('chains').max()
-    max_state_counts = max_state_per_chain.groupby('states').count()
-    state_vec = np.arange(1,max_states+1)
-    counts = [max_state_counts.loc[x].values[0] if x in max_state_counts.index else 0 for x in state_vec ]
-    ax[4].axvline(n_states, zorder = 2, color = 'black', label = 'Actual')
-    ax[4].bar(state_vec, counts, label = 'Inferred')
-    ax[4].set_xlabel("States")
-    ax[4].set_ylabel('Count')
-    ax[4].set_title('Number of states')
-    ax[4].legend()
-
-    plt.tight_layout()
+	plt.tight_layout()
 
