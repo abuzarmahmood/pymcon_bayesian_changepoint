@@ -19,7 +19,7 @@ def gen_simple_plots(
     with simple_model:
       poisson_ppc = pm.sample_posterior_predictive(poisson_trace)
 
-    ppc_values = poisson_ppc['posterior_predictive']['counts']
+    ppc_values = poisson_ppc['posterior_predictive']['obs']
     mean_ppc, std_ppc = np.mean(ppc_values,axis=(0,1)),np.std(ppc_values,axis=(0,1))
 
     poisson_switch_inferred = poisson_trace["posterior"]["switchpoint"]
